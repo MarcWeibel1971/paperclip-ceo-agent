@@ -35,6 +35,7 @@ PAPERCLIP_AGENT_ID   = os.environ.get("PAPERCLIP_AGENT_ID",   "16945af7-227f-483
 PAPERCLIP_COMPANY_ID = os.environ.get("PAPERCLIP_COMPANY_ID", "403e0e85-73a1-48c9-9db4-90fdd4ad984e")
 PAPERCLIP_BASE_URL   = os.environ.get("PAPERCLIP_BASE_URL",   "https://paperclip-production-15fc.up.railway.app")
 OPENAI_API_KEY       = os.environ.get("OPENAI_API_KEY", os.environ.get("OPENAI_KEY", ""))
+OPENAI_BASE_URL      = os.environ.get("OPENAI_BASE_URL", os.environ.get("OPENAI_API_BASE", "https://api.openai.com/v1"))
 PERPLEXITY_API_KEY   = os.environ.get("PERPLEXITY_API_KEY",   "PERPLEXITY_KEY_PLACEHOLDER")
 
 # ── Desired org chart — CEO will hire these roles if they are missing ──────────
@@ -216,7 +217,7 @@ def call_openai(system_prompt: str, user_prompt: str) -> str:
     if not OPENAI_API_KEY:
         return ""
     payload = {
-        "model": "gpt-4o-mini",
+        "model": "gpt-4.1-mini",
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_prompt}
@@ -226,7 +227,7 @@ def call_openai(system_prompt: str, user_prompt: str) -> str:
     }
     try:
         resp = requests.post(
-            "https://api.openai.com/v1/chat/completions",
+            f"{OPENAI_BASE_URL}/chat/completions",
             headers={
                 "Authorization": f"Bearer {OPENAI_API_KEY}",
                 "Content-Type": "application/json",
