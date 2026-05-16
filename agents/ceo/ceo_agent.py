@@ -217,7 +217,7 @@ def call_openai(system_prompt: str, user_prompt: str) -> str:
     if not OPENAI_API_KEY:
         return ""
     payload = {
-        "model": "gpt-4.1-mini",
+        "model": "gpt-4o-mini",
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_prompt}

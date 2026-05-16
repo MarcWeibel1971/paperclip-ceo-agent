@@ -11,7 +11,7 @@ COMPANY_ID = os.environ.get("PAPERCLIP_COMPANY_ID", "403e0e85-73a1-48c9-9db4-90f
 AGENT_ID = os.environ.get("PAPERCLIP_AGENT_ID", "88667ec1-f9cf-4675-a648-c0499c776e90")
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.manus.im/api/llm-proxy/v1")
+OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -72,7 +72,7 @@ def call_openai(system_prompt: str, user_prompt: str) -> str:
     if not OPENAI_API_KEY:
         return ""
     payload = {
-        "model": "gpt-4.1-mini",
+        "model": "gpt-4o-mini",
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_prompt}
