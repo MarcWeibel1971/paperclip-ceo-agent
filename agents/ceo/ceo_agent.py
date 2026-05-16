@@ -541,21 +541,56 @@ Bitte analysiere die Situation und gib deine strategische CEO-Einschätzung."""
         output_result("error", "No response from AI providers")
         sys.exit(1)
 
-    # ── Post comment on assigned issues (max 2) ───────────────────────────────
+    # ── Post comment on assigned issues (max 2) and set disposition ─────────────
     commented = 0
+    # Find Lead Developer agent for delegation
+    lead_dev_agent = next(
+        (a for a in agents if (a.get("role") or "").lower() in ("engineer", "cto")
+         or "lead" in (a.get("name") or "").lower()),
+        None
+    )
     for issue in assigned_issues[:2]:
         issue_id = issue.get("id")
         if not issue_id:
             continue
+
+        # Build delegation note if we can reassign
+        delegation_note = ""
+        if lead_dev_agent:
+            delegation_note = (
+                f"\n\n**Delegation:** Diese Aufgabe wird dem Lead Developer "
+                f"({lead_dev_agent.get('name', 'Lead Developer')}) zugewiesen."
+            )
+
         comment_body = (
             f"**CEO Review — {datetime.now(timezone.utc).strftime('%d.%m.%Y %H:%M')} UTC**\n\n"
-            f"{analysis}\n\n"
+            f"{analysis}"
+            f"{delegation_note}\n\n"
             f"---\n"
             f"*Autonome Massnahmen: {hiring_summary} | {alerts_summary}*"
         )
         if post_comment(issue_id, comment_body):
             log(f"Posted comment on {issue.get('identifier', issue_id)}")
             commented += 1
+
+            # Set issue to in_progress and delegate to Lead Developer if available
+            patch_data = {"status": "in_progress"}
+            if lead_dev_agent:
+                patch_data["assigneeAgentId"] = lead_dev_agent.get("id")
+                log(f"Delegating {issue.get('identifier', issue_id)} to {lead_dev_agent.get('name')}")
+            try:
+                r = requests.patch(
+                    f"{PAPERCLIP_BASE_URL}/api/issues/{issue_id}",
+                    headers={"Authorization": f"Bearer {PAPERCLIP_API_KEY}", "Content-Type": "application/json"},
+                    json=patch_data,
+                    timeout=15,
+                )
+                if r.status_code == 200:
+                    log(f"Issue {issue.get('identifier', issue_id)} set to in_progress")
+                else:
+                    log(f"WARNING: Could not update issue status: {r.status_code}")
+            except Exception as e:
+                log(f"WARNING: Issue update failed: {e}")
         else:
             log(f"WARNING: Could not post comment on {issue.get('identifier', issue_id)}")
 
