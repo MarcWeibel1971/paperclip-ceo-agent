@@ -297,16 +297,41 @@ def send_outlook_notification(issue_identifier: str, issue_title: str, pr_url: s
 # ── Core Logic ────────────────────────────────────────────────────────────────
 
 def find_relevant_files(issue_title: str, issue_desc: str, all_files: list) -> list:
-    """Ask GPT to identify which files are relevant for this issue."""
-    files_list = "\n".join(all_files[:300])  # limit to 300 files
+    """Identify relevant files using a smarter heuristic and all files."""
+    # First filter files to only source code
+    src_files = [f for f in all_files if f.startswith("src/") and not f.endswith(".test.ts")]
+    
+    # Extract keywords from title and description
+    text = (issue_title + " " + issue_desc).lower()
+    keywords = []
+    if "dokument" in text: keywords.append("dokument")
+    if "pdf" in text: keywords.append("pdf")
+    if "upload" in text: keywords.append("upload")
+    if "r2" in text or "storage" in text: keywords.extend(["r2", "storage", "s3"])
+    
+    relevant = []
+    # 1. Add core schema and routing always if available
+    core_files = ["src/models/Schema.ts", "src/libs/DB.ts", "src/features/dashboard/AppSidebar.tsx", "src/services/KundeService.ts"]
+    for f in core_files:
+        if f in all_files:
+            relevant.append(f)
+            
+    # 2. Add files matching keywords
+    for f in src_files:
+        f_lower = f.lower()
+        if any(kw in f_lower for kw in keywords) and f not in relevant:
+            relevant.append(f)
+            
+    # Ask GPT to filter the list down to the most relevant 8 files
+    files_list = "\n".join(relevant)
     prompt = f"""Given this issue:
 Title: {issue_title}
 Description: {issue_desc}
 
-And this list of files in the Next.js project:
+And this list of potentially relevant files in the Next.js project:
 {files_list}
 
-Return a JSON array of up to 5 file paths that are most likely relevant to fix this issue.
+Return a JSON array of up to 8 file paths that are absolutely necessary to implement this feature or fix this issue.
 Only return the JSON array, nothing else. Example: ["src/features/foo/Bar.tsx", "src/models/Schema.ts"]
 """
     result = call_openai(
@@ -316,26 +341,40 @@ Only return the JSON array, nothing else. Example: ["src/features/foo/Bar.tsx", 
         max_tokens=300,
     )
     try:
-        # Extract JSON array from response
+        import re
+        import json
         match = re.search(r'\[.*?\]', result, re.DOTALL)
         if match:
-            return json.loads(match.group())
-    except Exception:
-        pass
-    return []
+            files = json.loads(match.group(0))
+            # Ensure Schema is always included for context
+            if "src/models/Schema.ts" in all_files and "src/models/Schema.ts" not in files:
+                files.append("src/models/Schema.ts")
+            return [f for f in files if f in all_files]
+    except Exception as e:
+        log(f"Error parsing relevant files: {e}")
+    
+    return relevant[:8]
 
 def generate_fix(issue_title: str, issue_desc: str, file_contents: dict) -> dict:
     """Ask GPT-4o to generate a code fix. Returns {filepath: new_content}."""
     files_context = ""
     for path, content in file_contents.items():
-        # Limit each file to 200 lines
-        lines = content.split("\n")[:200]
+        # Allow up to 1000 lines for full context of important files
+        lines = content.split("\n")[:1000]
         files_context += f"\n\n### FILE: {path}\n```typescript\n" + "\n".join(lines) + "\n```"
 
     system = """Du bist der Lead Developer von Pensionierung Plus.
 Das Projekt ist ein Next.js 15 App Router Projekt mit TypeScript, Tailwind v4, Drizzle ORM, Clerk Auth, oRPC.
 Befolge die AGENTS.md Regeln: Named exports, absolute imports via @/, keine default exports ausser Next.js pages.
 Conventional Commits: type: summary (feat|fix|refactor|...).
+
+WICHTIG FÜR CODE GENERIERUNG:
+- Schreibe ECHTEN, FUNKTIONIERENDEN Code. Keine Platzhalter, keine "// TODO: Logik hier" Kommentare.
+- Nutze die bestehenden UI-Komponenten (shadcn/ui in src/components/ui).
+- Für DB-Zugriffe: Nutze Drizzle ORM mit dem bereitgestellten Schema.
+- Für S3/R2 Uploads: Generiere vollständige Presigned-URL Logik und Frontend-Upload Logik.
+- Analysiere den Kontext der bereitgestellten Dateien (Schema, API-Routen, UI) und passe deinen Code genau an diesen Stil an.
+- Du erstellst komplette neue Dateien, wenn sie nicht im Kontext sind.
 """
 
     user = f"""Analysiere und behebe folgendes Issue:
