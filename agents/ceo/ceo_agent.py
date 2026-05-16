@@ -573,11 +573,18 @@ Bitte analysiere die Situation und gib deine strategische CEO-Einschätzung."""
             log(f"Posted comment on {issue.get('identifier', issue_id)}")
             commented += 1
 
-            # Set issue to in_progress and delegate to Lead Developer if available
-            patch_data = {"status": "in_progress"}
+            # Set issue disposition: delegate to Lead Developer (in_review) or mark done
             if lead_dev_agent:
-                patch_data["assigneeAgentId"] = lead_dev_agent.get("id")
-                log(f"Delegating {issue.get('identifier', issue_id)} to {lead_dev_agent.get('name')}")
+                # Delegate to Lead Developer — set status to in_review with new assignee
+                patch_data = {
+                    "status": "in_review",
+                    "assigneeAgentId": lead_dev_agent.get("id"),
+                }
+                log(f"Delegating {issue.get('identifier', issue_id)} to {lead_dev_agent.get('name')} (in_review)")
+            else:
+                # No one to delegate to — mark as done (CEO has analysed it)
+                patch_data = {"status": "done"}
+                log(f"No Lead Developer found — marking {issue.get('identifier', issue_id)} as done")
             try:
                 r = requests.patch(
                     f"{PAPERCLIP_BASE_URL}/api/issues/{issue_id}",
@@ -586,11 +593,12 @@ Bitte analysiere die Situation und gib deine strategische CEO-Einschätzung."""
                     timeout=15,
                 )
                 if r.status_code == 200:
-                    log(f"Issue {issue.get('identifier', issue_id)} set to in_progress")
+                    new_status = patch_data.get('status', 'updated')
+                    log(f"Issue {issue.get('identifier', issue_id)} disposition set: {new_status}")
                 else:
-                    log(f"WARNING: Could not update issue status: {r.status_code}")
+                    log(f"WARNING: Could not update issue disposition: {r.status_code} {r.text[:100]}")
             except Exception as e:
-                log(f"WARNING: Issue update failed: {e}")
+                log(f"WARNING: Issue disposition update failed: {e}")
         else:
             log(f"WARNING: Could not post comment on {issue.get('identifier', issue_id)}")
 
