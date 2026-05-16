@@ -274,15 +274,17 @@ def send_outlook_notification(issue_identifier: str, issue_title: str, pr_url: s
             "body": {"content": body, "contentType": "text"},
         }])
 
+        # Correct format: to is array of strings, content is top-level field
+        mail_payload = json.dumps({"messages": [{
+            "to": [NOTIFY_EMAIL],
+            "subject": subject,
+            "content": body,
+        }]})
         result = subprocess.run(
             ["manus-mcp-cli", "tool", "call", "outlook_send_messages",
              "--server", "outlook-mail",
-             "--input", json.dumps({"messages": [{
-                 "to": [{"email": NOTIFY_EMAIL}],
-                 "subject": subject,
-                 "body": {"content": body, "contentType": "text"},
-             }]})],
-            capture_output=True, text=True, timeout=30,
+             "--input", mail_payload],
+            capture_output=True, text=True, timeout=60,
         )
         if result.returncode == 0:
             log(f"Outlook notification sent to {NOTIFY_EMAIL}")
